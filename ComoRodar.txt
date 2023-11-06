@@ -1,8 +1,5 @@
-COMEÇAR SERVIDOR DE NOMES
-python -m Pyro5.nameserver
-
-RODAR O SERVIDOR
-python servidor.py
+COMEÇAR COM O SERVIDOR
+flask --app gerenciadorEstoque run
 
 RODAR O CLIENTE
-python cliente.py
+node cliente.js

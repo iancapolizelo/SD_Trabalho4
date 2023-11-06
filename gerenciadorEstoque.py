@@ -10,9 +10,14 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 
 
-app = Flask("Gerenciador de Estoque")
-app.config["REDIS_URL"] = "redis://localhost"
-app.register_blueprint(sse, url_prefix='/stream')
+app = Flask(__name__)
+
+#app.config["REDIS_URL"] = "redis://127.0.0.1"
+#app.register_blueprint(sse, url_prefix='/stream')
+
+@app.route('/')
+def index():
+    return '<p>Gerenciador de Estoques</p>'
 
 listaProdutos = [
     {
@@ -37,37 +42,48 @@ listaProdutos = [
     }
 ]
 
+listaClientes = {}
+
 registros = {}
 
-def publish_sse_message(message, channel):
-    with app.app_context():
-        sse.publish({"message": message}, type=channel, channel=channel)
-
+#def publish_sse_message(message, channel):
+#    with app.app_context():
+#        sse.publish({"message": message}, type=channel, channel=channel)
 
 
 
 #Método para cadastrar novos produtos no estoque
 @app.route('/produto', methods=['POST'])
-@Pyro5.server.expose
-def cadastrarProdutoNovo(self, nomeGestor, uriGestor, codigo, nome, descricao, quantidade, precoUnidade, estoqueMinimo):
+def cadastrarProdutoNovo():
 
-    if codigo in listaProdutos:
-        print('\n' + nomeGestor + ' tentou cadastradar produto que já existe. \n')
-        return "\nProduto já existe.\n"
+    #{
+    #    'codigo' : "Codigo do Produto",
+    #    'nome' : "Nome do Produto",
+    #    'descricao' : "Descrição",
+    #    'quantidade' : 100,
+    #    'precoUnidade' : 500,
+    #    'estoqueMinimo' : 10,
+    #    'acabou' : 0,
+    #    'estoqueBaixo' : 0
+    #}
 
-    listaProdutos[codigo] = produto(nomeGestor, uriGestor, codigo, nome, descricao, quantidade, precoUnidade, estoqueMinimo)
+    produto = request.get_json()
 
-    print(nomeGestor +  " cadastrou produto " + nome + " com código " + str(codigo) + " no estoque.\n")
+    for item in listaProdutos:
+        if produto['codigo'] == item['codigo']:
+            abort(400, "Produto já existe")
+
+    listaProdutos.append(produto)
+
     horaCadastro = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
-    evento = "produto " + codigo + " cadastrado"
+    evento = "produto " + produto['codigo'] + " cadastrado"
     registros[horaCadastro] = evento
 
-    return "\nProduto cadastrado com SUCESSO.\n"
+    return jsonify(success=True), 200
 
 #Método para listar todos os produtos cadastrados no estoque
-@app.route('/produto', methods=['POST'])
-@Pyro5.server.expose
-def listarProdutos(self):
+@app.route('/produto', methods=['GET'])
+def listarProdutos():
     retorno = ''
     
     mensagem = "\nLista de produtos: \n"
@@ -77,31 +93,35 @@ def listarProdutos(self):
         mensagem = "Código do produto: " + produto + " Nome: " + listaProdutos[produto].nome + " Quantidade: " + str(listaProdutos[produto].quantidade) + " Estoque mínimo: " + listaProdutos[produto].estoqueMinimo +"\n"
         retorno += mensagem
 
-    return retorno
+    return jsonify(retorno), 200
 
 
 #Método para retirar produtos do estoque
 @app.route('/produto', methods=['POST'])    
-@Pyro5.server.expose
-def retirarProduto(self,nomeCliente, codigo, qtdRetirar):
+def retirarProduto():
 
-    user = Pyro5.api.Proxy(listaClientes[nomeCliente])
+    #{
+    #    'codigo' : "Codigo do Produto",
+    #    'qtdRetirar' : 1
+    #}
+
+    produto = request.get_json()
 
     for chave in listaProdutos.keys(): #Verifica se o produto existe
-        if chave == codigo:
+        if chave == produto['codigo']:
 
-            nova_qtd = int(int(listaProdutos[chave].quantidade) - int(qtdRetirar))
+            nova_qtd = int(int(listaProdutos[chave].quantidade) - int(produto['qtdRetirar']))
             horarioEvento = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
 
             if nova_qtd >= 0: #Verifica se o estoque é suficiente
                 if nova_qtd >= int(listaProdutos[chave].estoqueMinimo): #Verifica se o estoque ficará acima do mínimo
                     listaProdutos[chave].quantidade = nova_qtd
 
-                    evento = "retirado " + str(qtdRetirar) + " unidades do produto " + listaProdutos[chave].codigo + " do estoque"
+                    evento = "retirado " + str(produto['qtdRetirar']) + " unidades do produto " + listaProdutos[chave].codigo + " do estoque"
                     registros[horarioEvento] = evento
 
-                    print("\nRetirou " + str(qtdRetirar) + " unidades de " + listaProdutos[chave].nome + " do estoque. \n")
-                    return "\nRetirado com SUCESSO.\n"
+                    print("\nRetirou " + str(produto['qtdRetirar']) + " unidades de " + listaProdutos[chave].nome + " do estoque. \n")
+                    return jsonify(success=True), 200
                 else:
 
                     if nova_qtd == 0: #Verifica se o estoque acabou
@@ -109,101 +129,108 @@ def retirarProduto(self,nomeCliente, codigo, qtdRetirar):
                         listaProdutos[chave].acabou = 1
                         listaProdutos[chave].estoqueBaixo = 1
 
-                        evento = "retirado " + qtdRetirar + " unidades do produto " + codigo + " e ele ACABOU"
+                        evento = "retirado " + produto['qtdRetirar'] + " unidades do produto " + produto['codigo'] + " e ele ACABOU"
                         registros[horarioEvento] = evento
 
                         print("\nProduto " + listaProdutos[chave].nome + " acabou. \n")
-                        mensagem = "\nVocê retirou todo o estoque do produto: " + listaProdutos[chave].nome + "\n"
-                        user.notificacao(mensagem)
-
+                    
                         mensagem = "\nProduto: " + listaProdutos[chave].nome + " ACABOU.\n"
-                        userGestor = Pyro5.api.Proxy(listaProdutos[chave].uriGestorCriador)
-                        userGestor.notificacao(mensagem)
+                        #publish_sse_message(mensagem, channel=str(listaProdutos[chave]))
 
-                        return "\nRetirado com SUCESSO.\n"
+                        return jsonify(success=True), 200
+                    
                     else: #Verifica se o estoque ficará abaixo do mínimo
                         listaProdutos[chave].quantidade = nova_qtd
                         listaProdutos[chave].estoqueBaixo = 1
 
-                        evento = "retirado " + qtdRetirar + " unidades do produto " + codigo + " e ele está ABAIXO DO MÍNIMO" 
+                        evento = "retirado " + produto['qtdRetirar'] + " unidades do produto " + produto['codigo'] + " e ele está ABAIXO DO MÍNIMO" 
                         registros[horarioEvento] = evento
 
                         print("\nEstoque de " + listaProdutos[chave].nome + " está abaixo do mínimo. \n")
-                        mensagem = "\nVocê retirou " + str(qtdRetirar) + " unidades do produto: " + listaProdutos[chave].nome + "\n"
-                        user.notificacao(mensagem)
 
                         mensagem = "\nProduto: " + listaProdutos[chave].nome + " ABAIXO DO ESTOQUE MÍNIMO.\n"
-                        userGestor = Pyro5.api.Proxy(listaProdutos[chave].uriGestorCriador)
-                        userGestor.notificacao(mensagem)
+                        #publish_sse_message(mensagem, channel=str(listaProdutos[chave]))
 
-                        return "\nRetirado com SUCESSO.\n"
+                        return jsonify(success=True), 200
             else:
                 print("\nNão foi possível retirar do estoque, estoque insuficiente. \n")
-                return "\nEstoque insuficiente.\n"
+                return jsonify(success=False, res_code=500, message='Estoque insuficiente'), 200
 
-    return "\nProduto não existe.\n"
+    return jsonify(success=False, res_code=500, message='Produto não existe'), 200
 
 #Método para quantidade de produtos já existentes ao estoque
 @app.route('/produto', methods=['POST'])
-@Pyro5.server.expose
-def adicionarProduto(self, codigo, qtdAdicionar):
+def adicionarProduto():
+
+    #{
+    #    'codigo' : "Codigo do Produto",
+    #    'qtdAdicionar' : 1
+    #}
+
+    novoProduto = request.get_json()
 
     horarioEvento = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
 
     for chave in listaProdutos.keys(): 
-        if chave == codigo: #Verifica se o produto existe
+        if chave == novoProduto['codigo']: #Verifica se o produto existe
             
-            nova_qtd = int(int(listaProdutos[chave].quantidade) + int(qtdAdicionar))
+            nova_qtd = int(int(listaProdutos[chave].quantidade) + int(novoProduto['qtdAdicionar']))
             listaProdutos[chave].quantidade = nova_qtd
             
-            evento = "adicionado " + str(qtdAdicionar) + " unidades do produto " + codigo + " ao estoque"
+            evento = "adicionado " + str(novoProduto['qtdAdicionar']) + " unidades do produto " + novoProduto['codigo'] + " ao estoque"
             registros[horarioEvento] = evento
 
             if listaProdutos[chave].acabou == 1:
                 listaProdutos[chave].acabou = 0
 
-                evento = "produto " + codigo + " voltou ao estoque"
+                evento = "produto " + novoProduto['codigo'] + " voltou ao estoque"
                 horaVoltou = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
                 registros[horaVoltou] = evento
 
             if listaProdutos[chave].estoqueBaixo == 1 and nova_qtd >= int(listaProdutos[chave].estoqueMinimo):
                 listaProdutos[chave].estoqueBaixo = 0
 
-                evento = "estoque do produto " + codigo + " voltou ao normal"
+                evento = "estoque do produto " + novoProduto['codigo'] + " voltou ao normal"
                 horaVoltou = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
                 registros[horaVoltou] = evento
 
 
-            print("\nAdicionou " + str(qtdAdicionar) + " unidades de " + listaProdutos[chave].nome + " ao estoque. \n")
+            print("\nAdicionou " + str(novoProduto['qtdAdicionar']) + " unidades de " + listaProdutos[chave].nome + " ao estoque. \n")
         
-            return "\nUnidades adicionadas com SUCESSO.\n"
+            return jsonify(success=True), 200
 
         
     print("\nNão foi possível adicionar ao estoque, produto não existe. \n")
-    return "\nProduto não existe.\n"
+    return jsonify(success=False, res_code=500, message='Produto não existe'), 200
 
 #Método para registrar um novo gestor
 @app.route('/clientes', methods=['POST'])
-@Pyro5.server.expose
-def registrarCliente(self, nomeCliente, uriCliente):
-    if nomeCliente in listaClientes:
+def registrarCliente():
+
+    #{
+    #    'nome' : "Nome do Cliente",
+    #}
+
+    cliente = request.get_json()
+
+    if cliente['nome'] in listaClientes:
         print('\nCliente já cadastrado. \n')
 
-        return "\nCliente já cadastrado.\n"
+        return jsonify(success=False, res_code=500, message='Cliente já cadastrado'), 200
     else:
-        print("\nRegistrou cliente " + nomeCliente + "\n")
-        listaClientes[nomeCliente] = uriCliente
+        print("\nRegistrou cliente " + cliente['nome'] + "\n")
+        listaClientes.append(cliente['nome'])
     
     print("Lista de clientes: \n")
-    for chave in listaClientes.keys():
-        print("Nome= " + chave + " e Uri = " + str(listaClientes[chave]))
 
-    return "\nCliente cadastrado com SUCESSO.\n"
+    for chave in listaClientes.keys():
+        print("Nome= " + listaClientes[chave])
+
+    return jsonify(success=True), 200
 
 #Método para gerar relatório de produtos que acabaram
-@app.route('/produto', methods=['POST'])
-@Pyro5.server.expose
-def relatorioProdutosEstoque(self):
+@app.route('/produto', methods=['GET'])
+def relatorioProdutosEstoque():
 
     retorno = ''
 
@@ -237,12 +264,11 @@ def relatorioProdutosEstoque(self):
         mensagem = "\n"
         retorno += mensagem
 
-    return retorno
+    return jsonify(retorno), 200
 
 #Método para gerar relatório de registros
-@app.route('/produto', methods=['POST'])
-@Pyro5.server.expose
-def relatorioRegistros(self):
+@app.route('/produto', methods=['GET'])
+def relatorioRegistros():
     retorno = ''
 
     mensagem = "\nRelatório de registros: \n\n"
@@ -252,12 +278,11 @@ def relatorioRegistros(self):
         mensagem = registro + " - " + registros[registro] + "\n"
         retorno += mensagem
     
-    return retorno
+    return jsonify(retorno), 200
 
 #Método para gerar relatório de produtos que acabaram
-@app.route('/produto', methods=['POST'])
-@Pyro5.server.expose
-def relatorioProdutosAcabaram(self):
+@app.route('/produto', methods=['GET'])
+def relatorioProdutosAcabaram():
     retorno = ''
 
     mensagem = "\nRelatório de produtos que acabaram: \n\n"
@@ -290,20 +315,33 @@ def relatorioProdutosAcabaram(self):
             mensagem = "\n"
             retorno += mensagem
 
-    return retorno
+    return jsonify(retorno), 200
 
 #Método para gerar relatório de fluxo de movimentação por período
-@app.route('/produto', methods=['POST'])
-@Pyro5.server.expose
-def relatorioFluxoMovimentacao(self, dataInicio, dataFim):
+@app.route('/produto', methods=['GET'])
+def relatorioFluxoMovimentacao():
+    #{
+    #    'dataInicio' : "Data e hora de início",
+    #    'dataFim' : "Data e hora de fim",
+    #}
+
+    intervalo = request.get_json()
+
     retorno = ''
     
     mensagem = "\nRelatório de fluxo de movimentação: \n\n"
     retorno += mensagem
 
     for registro in registros.keys():
-        if dataInicio <= registro <= dataFim:
+        if intervalo['dataInicio'] <= registro <= intervalo['dataFim']:
             mensagem = registro + " - " + registros[registro] + "\n"
             retorno += mensagem
     
-    return retorno
+    return jsonify(retorno), 200
+
+
+if __name__ == '__main__':
+    scheduler = BackgroundScheduler()
+    scheduler.start()
+
+    app.run(port=5000, host='127.0.0.1',debug=True)
