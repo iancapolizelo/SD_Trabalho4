@@ -1,19 +1,20 @@
 from __future__ import print_function
-import Pyro5.api
-import Pyro5.server
-from produto import produto
 from time import gmtime, strftime
 from flask import Flask, Response, jsonify, request, abort
 from flask_sse import sse
+import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 
 
 
 
-app = Flask(__name__)
+app = Flask("Gerenciador de Estoque")
 
-#app.config["REDIS_URL"] = "redis://127.0.0.1"
-#app.register_blueprint(sse, url_prefix='/stream')
+app.config["REDIS_URL"] = "redis://127.0.0.1"
+app.register_blueprint(sse, url_prefix='/stream')
+
+# log = logging.getLogger('werkzeug')
+# log.disabled = True
 
 @app.route('/')
 def index():
@@ -46,14 +47,14 @@ listaClientes = {}
 
 registros = {}
 
-#def publish_sse_message(message, channel):
-#    with app.app_context():
-#        sse.publish({"message": message}, type=channel, channel=channel)
+# def publish_sse_message(message, channel):
+#     with app.app_context():
+#         sse.publish({"message": message}, type=channel, channel=channel)
 
 
 
 #Método para cadastrar novos produtos no estoque
-@app.route('/produto', methods=['POST'])
+@app.route('/produto/novo', methods=['POST'])
 def cadastrarProdutoNovo():
 
     #{
@@ -71,7 +72,8 @@ def cadastrarProdutoNovo():
 
     for item in listaProdutos:
         if produto['codigo'] == item['codigo']:
-            abort(400, "Produto já existe")
+
+            return jsonify('\nProduto já existe\n'), 500
 
     listaProdutos.append(produto)
 
@@ -79,25 +81,27 @@ def cadastrarProdutoNovo():
     evento = "produto " + produto['codigo'] + " cadastrado"
     registros[horaCadastro] = evento
 
-    return jsonify(success=True), 200
+    retorno = "\nProduto " + produto['nome'] + " cadastrado com sucesso. \n"
+
+    return jsonify(retorno), 200
 
 #Método para listar todos os produtos cadastrados no estoque
-@app.route('/produto', methods=['GET'])
+@app.route('/produto/listar', methods=['GET'])
 def listarProdutos():
     retorno = ''
     
     mensagem = "\nLista de produtos: \n"
     retorno += mensagem
 
-    for produto in listaProdutos.keys():
-        mensagem = "Código do produto: " + produto + " Nome: " + listaProdutos[produto].nome + " Quantidade: " + str(listaProdutos[produto].quantidade) + " Estoque mínimo: " + listaProdutos[produto].estoqueMinimo +"\n"
+    for produto in listaProdutos:
+        mensagem = "Código do produto: " + produto['codigo'] + ' Nome: ' + produto['nome'] + ' Quantidade: ' + str(produto['quantidade']) + "\n"
         retorno += mensagem
 
     return jsonify(retorno), 200
 
 
 #Método para retirar produtos do estoque
-@app.route('/produto', methods=['POST'])    
+@app.route('/produto/retirar', methods=['POST'])    
 def retirarProduto():
 
     #{
@@ -107,59 +111,59 @@ def retirarProduto():
 
     produto = request.get_json()
 
-    for chave in listaProdutos.keys(): #Verifica se o produto existe
-        if chave == produto['codigo']:
+    for chave in listaProdutos: #Verifica se o produto existe
+        if chave['codigo'] == produto['codigo']:
 
-            nova_qtd = int(int(listaProdutos[chave].quantidade) - int(produto['qtdRetirar']))
+            nova_qtd = int(int(chave['quantidade']) - int(produto['qtdRetirar']))
             horarioEvento = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
 
             if nova_qtd >= 0: #Verifica se o estoque é suficiente
-                if nova_qtd >= int(listaProdutos[chave].estoqueMinimo): #Verifica se o estoque ficará acima do mínimo
-                    listaProdutos[chave].quantidade = nova_qtd
+                if nova_qtd >= int(chave['estoqueMinimo']): #Verifica se o estoque ficará acima do mínimo
+                    chave['quantidade'] = nova_qtd
 
-                    evento = "retirado " + str(produto['qtdRetirar']) + " unidades do produto " + listaProdutos[chave].codigo + " do estoque"
+                    evento = "retirado " + str(produto['qtdRetirar']) + " unidades do produto " + chave['codigo'] + " do estoque"
                     registros[horarioEvento] = evento
 
-                    print("\nRetirou " + str(produto['qtdRetirar']) + " unidades de " + listaProdutos[chave].nome + " do estoque. \n")
-                    return jsonify(success=True), 200
+                    print("\nRetirou " + str(produto['qtdRetirar']) + " unidades de " + chave['nome'] + " do estoque. \n")
+                    return jsonify('\nRetirado com sucesso\n'), 200
                 else:
 
                     if nova_qtd == 0: #Verifica se o estoque acabou
-                        listaProdutos[chave].quantidade = nova_qtd
-                        listaProdutos[chave].acabou = 1
-                        listaProdutos[chave].estoqueBaixo = 1
+                        chave['quantidade'] = nova_qtd
+                        chave['acabou'] = 1
+                        chave['estoqueBaixo'] = 1
 
                         evento = "retirado " + produto['qtdRetirar'] + " unidades do produto " + produto['codigo'] + " e ele ACABOU"
                         registros[horarioEvento] = evento
 
-                        print("\nProduto " + listaProdutos[chave].nome + " acabou. \n")
+                        print("\nProduto " + chave['nome'] + " acabou. \n")
                     
-                        mensagem = "\nProduto: " + listaProdutos[chave].nome + " ACABOU.\n"
-                        #publish_sse_message(mensagem, channel=str(listaProdutos[chave]))
+                        mensagem = "\nProduto: " + chave['nome'] + " ACABOU.\n"
+                        # publish_sse_message(mensagem, channel=str(chave['nome']))
 
-                        return jsonify(success=True), 200
+                        return jsonify('\nRetirado com sucesso\n'), 200
                     
                     else: #Verifica se o estoque ficará abaixo do mínimo
-                        listaProdutos[chave].quantidade = nova_qtd
-                        listaProdutos[chave].estoqueBaixo = 1
+                        chave['quantidade'] = nova_qtd
+                        chave['estoqueBaixo'] = 1
 
                         evento = "retirado " + produto['qtdRetirar'] + " unidades do produto " + produto['codigo'] + " e ele está ABAIXO DO MÍNIMO" 
                         registros[horarioEvento] = evento
 
-                        print("\nEstoque de " + listaProdutos[chave].nome + " está abaixo do mínimo. \n")
+                        print("\nEstoque de " + chave['nome'] + " está abaixo do mínimo. \n")
 
-                        mensagem = "\nProduto: " + listaProdutos[chave].nome + " ABAIXO DO ESTOQUE MÍNIMO.\n"
-                        #publish_sse_message(mensagem, channel=str(listaProdutos[chave]))
+                        mensagem = "\nProduto: " + chave['nome'] + " ABAIXO DO ESTOQUE MÍNIMO.\n"
+                        # publish_sse_message(mensagem, channel=chave['nome'])
 
-                        return jsonify(success=True), 200
+                        return jsonify('\nRetirado com sucesso\n'), 200
             else:
                 print("\nNão foi possível retirar do estoque, estoque insuficiente. \n")
-                return jsonify(success=False, res_code=500, message='Estoque insuficiente'), 200
+                return jsonify('\nEstoque insuficiente\n'), 500
 
-    return jsonify(success=False, res_code=500, message='Produto não existe'), 200
+    return jsonify('\nProduto não existe\n'), 500
 
 #Método para quantidade de produtos já existentes ao estoque
-@app.route('/produto', methods=['POST'])
+@app.route('/produto/adicionar', methods=['POST'])
 def adicionarProduto():
 
     #{
@@ -171,36 +175,39 @@ def adicionarProduto():
 
     horarioEvento = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
 
-    for chave in listaProdutos.keys(): 
-        if chave == novoProduto['codigo']: #Verifica se o produto existe
+    for chave in listaProdutos: 
+        if chave['codigo'] == novoProduto['codigo']: #Verifica se o produto existe
             
-            nova_qtd = int(int(listaProdutos[chave].quantidade) + int(novoProduto['qtdAdicionar']))
-            listaProdutos[chave].quantidade = nova_qtd
+            nova_qtd = int(int(chave['quantidade']) + int(novoProduto['qtdAdicionar']))
+            chave['quantidade'] = nova_qtd
             
             evento = "adicionado " + str(novoProduto['qtdAdicionar']) + " unidades do produto " + novoProduto['codigo'] + " ao estoque"
             registros[horarioEvento] = evento
 
-            if listaProdutos[chave].acabou == 1:
-                listaProdutos[chave].acabou = 0
+            if chave['acabou'] == 1:
+                chave['acabou'] = 0
 
                 evento = "produto " + novoProduto['codigo'] + " voltou ao estoque"
                 horaVoltou = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
                 registros[horaVoltou] = evento
 
-            if listaProdutos[chave].estoqueBaixo == 1 and nova_qtd >= int(listaProdutos[chave].estoqueMinimo):
-                listaProdutos[chave].estoqueBaixo = 0
+            if chave['estoqueBaixo'] == 1 and nova_qtd >= int(chave['estoqueMinimo']):
+                chave['estoqueBaixo'] = 0
 
                 evento = "estoque do produto " + novoProduto['codigo'] + " voltou ao normal"
                 horaVoltou = strftime("%d/%m/%Y - %H:%M:%S", gmtime())
                 registros[horaVoltou] = evento
 
 
-            print("\nAdicionou " + str(novoProduto['qtdAdicionar']) + " unidades de " + listaProdutos[chave].nome + " ao estoque. \n")
+            print("\nAdicionou " + str(novoProduto['qtdAdicionar']) + " unidades de " + chave['nome'] + " ao estoque. \n")
+
+            retorno = '\n' + str(novoProduto['qtdAdicionar']) + ' unidades de ' + chave['nome'] + ' adicionadas ao estoque. \n'
         
-            return jsonify(success=True), 200
+            return jsonify(retorno), 200
 
         
     print("\nNão foi possível adicionar ao estoque, produto não existe. \n")
+
     return jsonify(success=False, res_code=500, message='Produto não existe'), 200
 
 #Método para registrar um novo gestor
@@ -229,7 +236,7 @@ def registrarCliente():
     return jsonify(success=True), 200
 
 #Método para gerar relatório de produtos que acabaram
-@app.route('/produto', methods=['GET'])
+@app.route('/produto/relatorio/estoque', methods=['GET'])
 def relatorioProdutosEstoque():
 
     retorno = ''
@@ -237,24 +244,24 @@ def relatorioProdutosEstoque():
     mensagem = "\nRelatório de produtos em estoque: \n\n"
     retorno += mensagem
 
-    for produto in listaProdutos.keys():
+    for produto in listaProdutos:
             
-        mensagem = "Código do produto: " + produto + "\n"
+        mensagem = "Código do produto: " + produto['codigo'] + "\n"
         retorno += mensagem
 
-        mensagem = "Nome: " + listaProdutos[produto].nome + "\n"
+        mensagem = "Nome: " + produto['nome'] + "\n"
         retorno += mensagem
 
-        mensagem = "Quantidade: " + str(listaProdutos[produto].quantidade) + "\n"
+        mensagem = "Quantidade: " + str(produto['quantidade']) + "\n"
         retorno += mensagem
 
-        mensagem = "Estoque mínimo: " + str(listaProdutos[produto].estoqueMinimo) + "\n"
+        mensagem = "Estoque mínimo: " + str(produto['estoqueMinimo']) + "\n"
         retorno += mensagem
 
         mensagem = "Registros: " + "\n"
         retorno += mensagem
 
-        regProcura = "produto " + listaProdutos[produto].codigo
+        regProcura = "produto " + produto['codigo']
 
         for registro in registros.keys():
             if regProcura in  registros[registro]:
@@ -267,7 +274,7 @@ def relatorioProdutosEstoque():
     return jsonify(retorno), 200
 
 #Método para gerar relatório de registros
-@app.route('/produto', methods=['GET'])
+@app.route('/produto/relatorio/movimento', methods=['GET'])
 def relatorioRegistros():
     retorno = ''
 
@@ -281,31 +288,31 @@ def relatorioRegistros():
     return jsonify(retorno), 200
 
 #Método para gerar relatório de produtos que acabaram
-@app.route('/produto', methods=['GET'])
+@app.route('/produto/relatorio/acabaram', methods=['GET'])
 def relatorioProdutosAcabaram():
     retorno = ''
 
     mensagem = "\nRelatório de produtos que acabaram: \n\n"
     retorno += mensagem
 
-    for produto in listaProdutos.keys():
-        if listaProdutos[produto].acabou == 1:
-            mensagem = "Código do produto: " + produto + "\n"
+    for produto in listaProdutos:
+        if produto['acabou'] == 1:
+            mensagem = "Código do produto: " + produto['codigo'] + "\n"
             retorno += mensagem
 
-            mensagem = "Nome: " + listaProdutos[produto].nome + "\n"
+            mensagem = "Nome: " + produto['nome'] + "\n"
             retorno += mensagem
 
-            mensagem = "Quantidade: " + str(listaProdutos[produto].quantidade) + "\n"
+            mensagem = "Quantidade: " + str(produto['quantidade']) + "\n"
             retorno += mensagem
 
-            mensagem = "Estoque mínimo: " + str(listaProdutos[produto].estoqueMinimo) + "\n"
+            mensagem = "Estoque mínimo: " + str(produto['estoqueMinimo']) + "\n"
             retorno += mensagem
 
             mensagem = "Registros: " + "\n"
             retorno += mensagem
 
-            regProcura = "produto " + listaProdutos[produto].codigo
+            regProcura = "produto " + produto['codigo']
 
             for registro in registros.keys():
                 if regProcura in  registros[registro]:
@@ -318,7 +325,7 @@ def relatorioProdutosAcabaram():
     return jsonify(retorno), 200
 
 #Método para gerar relatório de fluxo de movimentação por período
-@app.route('/produto', methods=['GET'])
+@app.route('/produto/relatorio/fluxo', methods=['POST'])
 def relatorioFluxoMovimentacao():
     #{
     #    'dataInicio' : "Data e hora de início",

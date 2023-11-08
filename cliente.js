@@ -12,16 +12,16 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-// Tratamento de eventos SSE recebidos
-//eventSource.addEventListener('message', event => {
-//    const message = JSON.parse(event.data);
-//    console.log('Nova mensagem recebida:', message);
-//});
+//Tratamento de eventos SSE recebidos
+// eventSource.addEventListener('message', event => {
+//     const message = JSON.parse(event.data);
+//     console.log('Nova mensagem recebida:', message);
+// });
 
 
-//eventSource.addEventListener('error', error => {
-//    console.error('Erro na conexão SSE:', error);
-//});
+// eventSource.addEventListener('error', error => {
+//     console.error('Erro na conexão SSE:', error);
+// });
 
 function cadastrarProduto() {
     rl.question("Digite o código do produto: ", (codigo) => {
@@ -41,7 +41,7 @@ function cadastrarProduto() {
                             estoqueBaixo: 0
                         };
 
-                        fetch('http://http://127.0.0.1:5000/produto/', {
+                        fetch('http://127.0.0.1:5000/produto/novo', {
                             method: 'POST',
                             body: JSON.stringify(produto),
                             headers: { 'Content-Type': 'application/json' }
@@ -52,7 +52,7 @@ function cadastrarProduto() {
                                 iniciarCliente();
                             })
                             .catch(error => {
-                                console.log("Erro ao cadastrar produto:", error);
+                                console.log("\nErro ao cadastrar produto:", error);
                                 iniciarCliente();
                             
                             });
@@ -73,7 +73,7 @@ function adicionarProduto() {
                 qtdAdicionar: qtdAdicionar
             };
 
-            fetch('http://http://127.0.0.1:5000/produto/', {
+            fetch('http://127.0.0.1:5000/produto/adicionar', {
                 method: 'POST',
                 body: JSON.stringify(produto),
                 headers: { 'Content-Type': 'application/json' }
@@ -84,7 +84,7 @@ function adicionarProduto() {
                     iniciarCliente();
                 })
                 .catch(error => {
-                    console.log("Erro ao adicionar produto:", error);
+                    console.log("\nErro ao adicionar produto: ", error);
                     iniciarCliente();
                 
                 });  
@@ -100,7 +100,7 @@ function retirarProduto() {
                 qtdRetirar: qtdRetirar
             };
 
-            fetch('http://http://127.0.0.1:5000/produto/', {
+            fetch('http://127.0.0.1:5000/produto/retirar', {
                 method: 'POST',
                 body: JSON.stringify(produto),
                 headers: { 'Content-Type': 'application/json' }
@@ -112,7 +112,7 @@ function retirarProduto() {
                 }
                 )
                 .catch(error => {
-                    console.log("Erro ao retirar produto:", error);
+                    console.log("\nErro ao retirar produto:", error);
                     iniciarCliente();
 
                 });
@@ -121,7 +121,7 @@ function retirarProduto() {
 }
 
 function listarProdutos() {
-    fetch('http://http://127.0.0.1:5000/produto/', {
+    fetch('http://127.0.0.1:5000/produto/listar', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -132,14 +132,14 @@ function listarProdutos() {
         }
         )
         .catch(error => {
-            console.log("Erro ao listar produtos:", error);
+            console.log("\nErro ao listar produtos:", error);
             iniciarCliente();
 
         });
 }
 
 function relatorioProdutosEmEstoque() {
-    fetch('http://http://127.0.0.1:5000/produto/', {
+    fetch('http://127.0.0.1:5000/produto/relatorio/estoque', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -157,7 +157,7 @@ function relatorioProdutosEmEstoque() {
 }
 
 function relatorioMovimentacaoProdutos() {
-    fetch('http://http://127.0.0.1:5000/produto/', {
+    fetch('http://127.0.0.1:5000/produto/relatorio/movimento', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -168,14 +168,14 @@ function relatorioMovimentacaoProdutos() {
         }
         )
         .catch(error => {
-            console.log("Erro ao listar produtos:", error);
+            console.log("\nErro ao listar produtos:", error);
             iniciarCliente();
 
         });
 }
 
 function relatorioProdutosAcabaram() {
-    fetch('http://http://127.0.0.1:5000/produto/', {
+    fetch('http://127.0.0.1:5000/produto/relatorio/acabaram', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -200,8 +200,8 @@ function relatorioFluxoMovimentacao() {
                 dataFim: dataFim
             };
             
-            fetch('http://http://127.0.0.1:5000/produto/', {
-                method: 'GET',
+            fetch('http://127.0.0.1:5000/produto/relatorio/fluxo', {
+                method: 'POST',
                 body: JSON.stringify(data),
                 headers: { 'Content-Type': 'application/json' }
             })
@@ -222,24 +222,24 @@ function relatorioFluxoMovimentacao() {
 
 
 function exibirMenu() {
-    console.log("===== Menu do Cliente =====");
+    console.log("\n===== Menu do Cliente =====");
     console.log("1 - Cadastrar novo produto");
     console.log("2 - Adicionar produto existente");
     console.log("3 - Retirar produto");
     console.log("4 - Listar produtos");
     console.log("5 - Gerar relatórios");
     console.log("0. Sair");
-    console.log("===========================");
+    console.log("===========================\n");
 }
 
 function exibirMenuRelatorio() {
-    console.log("===== Menu de Relatórios =====");
+    console.log("\n===== Menu de Relatórios =====");
     console.log("a - Relatório de produtos em estoque");
     console.log("b - Relatório de registros de movimentação de produtos");
     console.log("c - Relatório de produtos que acabaram");
     console.log("d - Relatório do fluxo de movimentação por período");
     console.log("x - Sair");
-    console.log("===========================");
+    console.log("===========================\n");
 }
 
 function processarEscolhaRelatorio(escolha) {
@@ -260,7 +260,8 @@ function processarEscolhaRelatorio(escolha) {
             iniciarCliente();
             break;
         default:
-            console.log("Escolha inválida. Tente novamente.");
+            console.log("\nEscolha inválida. Tente novamente.\n");
+            iniciarCliente();
             break;
     }
 }
@@ -289,9 +290,9 @@ function processarEscolha(escolha) {
                 // Chame a função processarEscolha com o primeiro caractere
                 processarEscolhaRelatorio(primeiroCaractere);
 
-                if (primeiroCaractere !== '0') {
-                    iniciarCliente();
-                }
+                // if (primeiroCaractere !== '0') {
+                //     iniciarCliente();
+                // }
             });
             break;
 
@@ -300,7 +301,7 @@ function processarEscolha(escolha) {
             break;
             
         default:
-            console.log("Escolha inválida. Tente novamente.");
+            console.log("\nEscolha inválida. Tente novamente.\n");
             iniciarCliente();
             break;
     }
@@ -317,9 +318,11 @@ function iniciarCliente() {
         // Chame a função processarEscolha com o primeiro caractere
         processarEscolha(primeiroCaractere);
 
-        if (primeiroCaractere !== '0') {
-            iniciarCliente();
-        }
+        // console.log("Teste");
+
+        // if (primeiroCaractere !== '0') {
+        //     iniciarCliente();
+        // }
     });
 }
 
