@@ -1,6 +1,6 @@
 from __future__ import print_function
 from time import gmtime, strftime
-from flask import Flask, Response, jsonify, request, abort
+from flask import Flask, Response, jsonify, request, abort, make_response
 from flask_sse import sse
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -47,9 +47,9 @@ listaClientes = {}
 
 registros = {}
 
-# def publish_sse_message(message, channel):
-#     with app.app_context():
-#         sse.publish({"message": message}, type=channel, channel=channel)
+def publish_sse_message(message, channel):
+    with app.app_context():
+        sse.publish({"message": message}, type=channel)
 
 
 
@@ -139,7 +139,7 @@ def retirarProduto():
                         print("\nProduto " + chave['nome'] + " acabou. \n")
                     
                         mensagem = "\nProduto: " + chave['nome'] + " ACABOU.\n"
-                        # publish_sse_message(mensagem, channel=str(chave['nome']))
+                        publish_sse_message(mensagem, channel=str(chave['nome']))
 
                         return jsonify('\nRetirado com sucesso\n'), 200
                     
@@ -153,7 +153,7 @@ def retirarProduto():
                         print("\nEstoque de " + chave['nome'] + " está abaixo do mínimo. \n")
 
                         mensagem = "\nProduto: " + chave['nome'] + " ABAIXO DO ESTOQUE MÍNIMO.\n"
-                        # publish_sse_message(mensagem, channel=chave['nome'])
+                        publish_sse_message(mensagem, channel=chave['nome'])
 
                         return jsonify('\nRetirado com sucesso\n'), 200
             else:

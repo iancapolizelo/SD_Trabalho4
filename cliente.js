@@ -3,7 +3,7 @@ const fetch = require('node-fetch');
 
 const endpoint = 'http://127.0.0.1:5000/';
 
-const eventSource = new EventSource(endpoint);
+let eventSource = new EventSource(endpoint+'/stream');
 const readline = require('readline');
 
 
@@ -12,16 +12,17 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-//Tratamento de eventos SSE recebidos
-// eventSource.addEventListener('message', event => {
-//     const message = JSON.parse(event.data);
-//     console.log('Nova mensagem recebida:', message);
-// });
+eventSource.addEventListener('error', error => {
+    console.error('Erro na conexão SSE:', error);
+});
 
-
-// eventSource.addEventListener('error', error => {
-//     console.error('Erro na conexão SSE:', error);
-// });
+function escutar_sse(nome_produto) {
+    //Tratamento de eventos SSE recebidos
+    eventSource.addEventListener(nome_produto, event => {
+        const message = JSON.parse(event.data).message;
+        console.log('Nova mensagem recebida:', message);
+    });
+}
 
 function cadastrarProduto() {
     rl.question("Digite o código do produto: ", (codigo) => {
@@ -47,10 +48,11 @@ function cadastrarProduto() {
                             headers: { 'Content-Type': 'application/json' }
                         })
                             .then(response => response.json())
-                            .then(data =>{
+                            .then(function (data) {
                                 console.log(data);
                                 iniciarCliente();
-                            })
+                                escutar_sse(produto.nome);
+                            }.bind(produto))
                             .catch(error => {
                                 console.log("\nErro ao cadastrar produto:", error);
                                 iniciarCliente();
